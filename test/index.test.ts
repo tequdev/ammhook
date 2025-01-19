@@ -227,7 +227,7 @@ describe('test', () => {
   beforeAll(async () => {
     testContext = await setupClient(serverUrl)
     const hook = {
-      CreateCode: readHookBinaryHexFromNS('../build/amm'),
+      CreateCode: readHookBinaryHexFromNS('../amm'),
       Flags: SetHookFlags.hsfOverride,
       HookOn: calculateHookOn(['Invoke', 'Remit']),
       HookNamespace: hexNamespace(namespace),
