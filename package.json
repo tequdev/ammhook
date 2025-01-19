@@ -1,0 +1,30 @@
+{
+  "name": "ammhook",
+  "version": "0.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "c2wasm-cli amm.c build/ --headers .",
+    "test": "LOG_LEVEL=error VITE_CJS_TRACE=true vitest",
+    "xrpld:start": "xrpld-netgen up:standalone --protocol xahau --version 2024.11.18-release+1141",
+    "xrpld:stop": "xrpld-netgen down:standalone --protocol xahau --version 2024.11.18-release+1141",
+    "trace": "docker logs --tail 100 -f xahau 2>&1 | cut -d ' ' -f 5- | grep -E 'Publishing ledger|HookInfo|HookTrace|HookError|HookEmit|preclaim result'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@transia/hooks-toolkit": "^1.0.13",
+    "c2wasm-cli": "^1.0.6",
+    "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.5.3",
+    "@transia/xrpl": "2.7.3-alpha.28",
+    "@tsconfig/node18": "^18.2.2",
+    "@types/big.js": "^6.2.2",
+    "big.js": "^6.2.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.3.1"
+  }
+}
