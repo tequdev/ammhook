@@ -812,6 +812,26 @@ describe('test', () => {
             expect(states.balanceA * states.balanceB).toBeGreaterThanOrEqual(expectedConstant)
             expect(expectedA).toBeCloseTo(states.balanceA)
           })
+          it.only('Shoud not take the profits in the pool by withdrawing immediately after depositing the pool. ', async () => {
+            await swap(testContext.alice, { issuer: testContext.gw.address, currency: 'EUR', value: '100', })
+            const states = await getStates(testContext.alice)
+            const deposit_amountA = states.balanceA
+            const deposit_amountB = states.balanceB
+            await fundIOU(testContext.gw, testContext.bob, {
+              issuer: testContext.gw.address,
+              currency: 'EUR',
+              value: '100',
+            })
+            await deposit(
+              testContext.bob,
+              { issuer: testContext.gw.address, currency: 'EUR', value: deposit_amountA.toString(), },
+              { issuer: testContext.gw.address, currency: 'USD', value: deposit_amountB.toString(), }
+            )
+            await withdraw(testContext.bob)
+            const withdraw_states = await getStates(testContext.alice)
+            expect(withdraw_states.balanceA).toBe(deposit_amountA)
+            expect(withdraw_states.balanceB).toBe(deposit_amountB)
+          })
         })
         describe('XAH/IOU', () => {
           it.todo('swap')
