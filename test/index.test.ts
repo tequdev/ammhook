@@ -187,10 +187,12 @@ describe('test', () => {
   }
 
   const getStates = async (provider: Wallet) => {
-    const getState = async (key: string) => StateUtility.getHookState(testContext.client, testContext.hook1.address, key, hexNamespace(namespace))
-    const currencyState = await getState(padHexString(convertStringToHex('CUR')))
-    const curA = currencyState.HookStateData.substring(0, 40 * 2)
-    const curB = currencyState.HookStateData.substring(40 * 2, 80 * 2)
+    const namespaceStates = await StateUtility.getHookStateDir(testContext.client, testContext.hook1.address, hexNamespace(namespace))
+    const getState = (key: string) => namespaceStates.find(state => state.HookStateKey === key)
+
+    const currencyState = getState(padHexString(convertStringToHex('CUR')))
+    const curA = currencyState!.HookStateData.substring(0, 40 * 2)
+    const curB = currencyState!.HookStateData.substring(40 * 2, 80 * 2)
     const currencyA = {
       currency: hexToCurrency(curA.substring(0, 20 * 2)),
       issuer: encodeAccountID(Buffer.from(curA.substring(20 * 2, 40 * 2), 'hex'))
@@ -200,19 +202,19 @@ describe('test', () => {
       issuer: encodeAccountID(Buffer.from(curB.substring(20 * 2, 40 * 2), 'hex'))
     }
 
-    const AState = await getState(padHexString(convertStringToHex('A')))
-    const balanceA = hexToXfl(AState.HookStateData)
-    const BState = await getState(padHexString(convertStringToHex('B')))
-    const balanceB = hexToXfl(BState.HookStateData)
-    const GState = await getState(padHexString(convertStringToHex('G')))
-    const gConstant = hexToXfl(GState.HookStateData)
-    const FACState = await getState(padHexString(convertStringToHex('FAC')))
-    const FAC = hexToXfl(FACState.HookStateData)
-    const ownerState = await getState(padHexString(decodeAccountID(provider.address).toString('hex').toUpperCase()))
-    const ownerLp = hexToXfl(ownerState.HookStateData.substring(0, 8 * 2))
-    const ownerFeeSetting = hexToXfl(ownerState.HookStateData.substring(8 * 2, 16 * 2))
-    const TOTState = await getState(padHexString(convertStringToHex('TOT')))
-    const TOT = hexToXfl(TOTState.HookStateData)
+    const AState = getState(padHexString(convertStringToHex('A')))
+    const balanceA = hexToXfl(AState!.HookStateData)
+    const BState = getState(padHexString(convertStringToHex('B')))
+    const balanceB = hexToXfl(BState!.HookStateData)
+    const GState = getState(padHexString(convertStringToHex('G')))
+    const gConstant = hexToXfl(GState!.HookStateData)
+    const FACState = getState(padHexString(convertStringToHex('FAC')))
+    const FAC = hexToXfl(FACState!.HookStateData)
+    const ownerState = getState(padHexString(decodeAccountID(provider.address).toString('hex').toUpperCase()))
+    const ownerLp = ownerState ? hexToXfl(ownerState!.HookStateData.substring(0, 8 * 2)) : undefined
+    const ownerFeeSetting = ownerState ? hexToXfl(ownerState!.HookStateData.substring(8 * 2, 16 * 2)) : undefined
+    const TOTState = getState(padHexString(convertStringToHex('TOT')))
+    const TOT = hexToXfl(TOTState!.HookStateData)
     return {
       currencyA,
       currencyB,
@@ -229,7 +231,7 @@ describe('test', () => {
   beforeAll(async () => {
     testContext = await setupClient(serverUrl)
     const hook = {
-      CreateCode: readHookBinaryHexFromNS('../amm'),
+      CreateCode: readHookBinaryHexFromNS('../build/amm'),
       Flags: SetHookFlags.hsfOverride,
       HookOn: calculateHookOn(['Invoke', 'Remit']),
       HookNamespace: hexNamespace(namespace),
@@ -297,7 +299,7 @@ describe('test', () => {
     })
 
     it.each(['0.06', '0.050001', '-1', '-0.000001'])(
-      'Invalid AMM fee',
+      'Invalid AMM fee %s',
       async (fee) => {
         const response = Xrpld.submit(testContext.client, {
           tx: {
@@ -717,10 +719,6 @@ describe('test', () => {
         })
         it.each([1, 10, 20, 50, 100, 250, 500, 1000, 2500,/*5000,*/ 10000])('swap A (%s) -> B', async (amount) => {
           // 5000 will cause `AMM: Invariant failure A*B<G.`
-          {
-            const states = await getStates(testContext.alice)
-            console.log(states)
-          }
           await swap(testContext.alice, {
             issuer: testContext.gw.address,
             currency: 'EUR',
@@ -729,10 +727,6 @@ describe('test', () => {
           const states = await getStates(testContext.alice)
           expect(states.balanceA).toBe(1000 + amount)
           expect(states.balanceB).toBeCloseTo((1000000 / (1000 + amount)))
-          {
-            const states = await getStates(testContext.alice)
-            console.log(states)
-          }
         })
       })
       describe('with fee', () => {
@@ -897,7 +891,7 @@ describe('test', () => {
           expect(states.TOT).toBe(100)
         }
       })
-      it('deposit large amount', async () => {
+      it('deposit small amount', async () => {
         const s = await getStates(testContext.alice)
         expect(s.ownerLp).toBe(100)
         expect(s.TOT).toBe(100)
@@ -912,7 +906,7 @@ describe('test', () => {
         expect(states.balanceA).toBe(110)
         expect(states.balanceB).toBe(110)
       })
-      it('deposit small amount', async () => {
+      it('deposit large amount', async () => {
         const s = await getStates(testContext.alice)
         expect(s.balanceA).toBe(100)
         expect(s.balanceB).toBe(100)
@@ -940,15 +934,90 @@ describe('test', () => {
       })
     })
     describe('pool fee', () => {
-      it.todo('new vote')
-      it.todo('update vote')
-      it.todo('delete vote')
+      afterEach(async () => {
+        await withdraw(testContext.alice)
+      })
+      it('same account', async () => {
+        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0')
+        const states = await getStates(testContext.alice)
+        expect(states.FAC).toBe(0)
+        expect(states.ownerFeeSetting).toBe(0)
+        // update to zero
+        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0')
+        {
+          const states = await getStates(testContext.alice)
+          expect(states.FAC).toBe(0)
+          expect(states.ownerFeeSetting).toBe(0)
+        }
+        // increase
+        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.03')
+        {
+          const states = await getStates(testContext.alice)
+          expect(states.FAC).toBe(0.03 * 300)
+          expect(states.ownerFeeSetting).toBe(0.03)
+        }
+        // decrease
+        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.01')
+        {
+          const states = await getStates(testContext.alice)
+          expect(states.FAC).toBe(0.01 * 400)
+          expect(states.ownerFeeSetting).toBe(0.01)
+        }
+        // partial withdraw
+        await withdraw(testContext.alice, '200')
+        {
+          const states = await getStates(testContext.alice)
+          expect(states.FAC).toBe(0.01 * 200)
+          expect(states.ownerFeeSetting).toBe(0.01)
+        }
+      })
+      it('different account', async () => {
+        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.01')
+        const states = await getStates(testContext.bob)
+        expect(states.FAC).toBe(0.01 * 100)
+        expect(states.ownerFeeSetting).toBeUndefined()
+        // vote to zero
+        await deposit(testContext.bob, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0')
+        {
+          const states = await getStates(testContext.bob)
+          expect(states.FAC).toBe(0.01 * 100)
+          expect(states.ownerFeeSetting).toBe(0)
+        }
+        // increase
+        await deposit(testContext.bob, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.03')
+        {
+          const states = await getStates(testContext.bob)
+          expect(states.FAC).toBe(0.01 * 100 + 0.03 * 200)
+          expect(states.ownerFeeSetting).toBe(0.03)
+        }
+        // decrease
+        await deposit(testContext.bob, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.01')
+        {
+          const states = await getStates(testContext.bob)
+          expect(states.FAC).toBe(0.01 * 100 + 0.01 * 300)
+          expect(states.ownerFeeSetting).toBe(0.01)
+        }
+        // partial withdraw
+        await withdraw(testContext.bob, '200')
+        {
+          const states = await getStates(testContext.bob)
+          expect(states.FAC).toBe(0.01 * 100 + 0.01 * 100)
+          expect(states.ownerFeeSetting).toBe(0.01)
+        }
+        // withdraw
+        await withdraw(testContext.bob)
+        {
+          const states = await getStates(testContext.bob)
+          expect(states.FAC).toBe(0.01 * 100)
+          expect(states.ownerFeeSetting).toBeUndefined()
+        }
+      })
     })
-    describe.todo('edge cases', () => {
-      it.todo('large amount trade to small pool')
-      it.todo('small amount trade to large pool')
-    })
-    // TransferRate
   })
+  describe.todo('edge cases', () => {
+    it.todo('large amount trade to small pool')
+    it.todo('small amount trade to large pool')
+  })
+  // TransferRate
 })
 
