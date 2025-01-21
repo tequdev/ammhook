@@ -39,7 +39,7 @@ import {
   hexToXfl,
 } from '@transia/hooks-toolkit/dist/npm/src/libs/binary-models'
 import { hashURIToken } from '@transia/xrpl/dist/npm/utils/hashes'
-import type { Amount } from '@transia/xrpl/dist/npm/models/common'
+import type { Amount, IssuedCurrencyAmount } from '@transia/xrpl/dist/npm/models/common'
 
 import Big from 'big.js'
 
@@ -77,6 +77,21 @@ const mergeBalanceChanges = (
 
 describe('test', () => {
   let testContext: XrplIntegrationTestContext
+
+  const USD = (amount: string | number): IssuedCurrencyAmount => {
+    return {
+      issuer: testContext.gw.address,
+      currency: 'USD',
+      value: amount.toString(),
+    }
+  }
+  const EUR = (amount: string | number): IssuedCurrencyAmount => {
+    return {
+      issuer: testContext.gw.address,
+      currency: 'EUR',
+      value: amount.toString(),
+    }
+  }
 
   const newAccount = async (amount?: string) => {
     const wallet = Wallet.generate()
@@ -141,7 +156,7 @@ describe('test', () => {
     })
   }
 
-  const withdraw = (wallet: Wallet, amount?: string) => {
+  const withdraw = (wallet: Wallet, amount?: string | number) => {
     return Xrpld.submit(testContext.client, {
       tx: {
         TransactionType: 'Remit',
@@ -151,7 +166,7 @@ describe('test', () => {
           {
             HookParameter: {
               HookParameterName: convertStringToHex('WDR'),
-              HookParameterValue: floatToLEXfl(amount).toUpperCase(),
+              HookParameterValue: floatToLEXfl(amount.toString()).toUpperCase(),
             },
           },
         ] : undefined,
@@ -421,7 +436,7 @@ describe('test', () => {
           Destination: newAcc.address,
           Amounts: [
             { AmountEntry: { Amount: '100', }, },
-            { AmountEntry: { Amount: { issuer: testContext.alice.address, currency: 'EUR', value: '100', }, }, },
+            { AmountEntry: { Amount: EUR('100'), }, },
           ] as any,
         },
         wallet: testContext.alice,
@@ -453,11 +468,7 @@ describe('test', () => {
         await withdraw(testContext.alice)
       })
       it('setup - 100EUR/100USD', async () => {
-        const response = await deposit(
-          testContext.alice,
-          { issuer: testContext.gw.address, currency: 'EUR', value: '100' },
-          { issuer: testContext.gw.address, currency: 'USD', value: '100' },
-        )
+        const response = await deposit(testContext.alice, EUR('100'), USD('100'))
         const { executions } = await ExecutionUtility.getHookExecutionsFromMeta(
           testContext.client,
           response.meta as TransactionMetadata,
@@ -474,10 +485,10 @@ describe('test', () => {
           ownerFeeSetting,
           TOT,
         } = await getStates(testContext.alice)
-        expect(currencyA.currency).toBe('EUR')
-        expect(currencyA.issuer).toBe(testContext.gw.address)
-        expect(currencyB.currency).toBe('USD')
-        expect(currencyB.issuer).toBe(testContext.gw.address)
+        expect(currencyA.currency).toBe(EUR('').currency)
+        expect(currencyA.issuer).toBe(EUR('').issuer)
+        expect(currencyB.currency).toBe(USD('').currency)
+        expect(currencyB.issuer).toBe(USD('').issuer)
         expect(balanceA).toBe(100)
         expect(balanceB).toBe(100)
         expect(gConstant).toBe(10000)
@@ -487,21 +498,8 @@ describe('test', () => {
         expect(TOT).toBe(100)
       })
       it('setup2 - 1000000000EUR/0.1USD with FEE', async () => {
-        await fundIOU(testContext.gw, testContext.alice, {
-          issuer: testContext.gw.address,
-          currency: 'EUR',
-          value: '1000000000',
-        })
-        const response = await deposit(
-          testContext.alice,
-          {
-            issuer: testContext.gw.address,
-            currency: 'EUR',
-            value: '1000000000',
-          },
-          { issuer: testContext.gw.address, currency: 'USD', value: '0.1' },
-          '0.02',
-        )
+        await fundIOU(testContext.gw, testContext.alice, EUR('1000000000'))
+        const response = await deposit(testContext.alice, EUR('1000000000'), USD('0.1'), '0.02')
         const { executions } = await ExecutionUtility.getHookExecutionsFromMeta(
           testContext.client,
           response.meta as TransactionMetadata,
@@ -518,10 +516,10 @@ describe('test', () => {
           ownerFeeSetting,
           TOT,
         } = await getStates(testContext.alice)
-        expect(currencyA.currency).toBe('EUR')
-        expect(currencyA.issuer).toBe(testContext.gw.address)
-        expect(currencyB.currency).toBe('USD')
-        expect(currencyB.issuer).toBe(testContext.gw.address)
+        expect(currencyA.currency).toBe(EUR('').currency)
+        expect(currencyA.issuer).toBe(EUR('').issuer)
+        expect(currencyB.currency).toBe(USD('').currency)
+        expect(currencyB.issuer).toBe(USD('').issuer)
         expect(balanceA).toBe(1000000000)
         expect(balanceB).toBe(0.1)
         expect(gConstant).toBe(100000000)
@@ -534,32 +532,20 @@ describe('test', () => {
         await deposit(
           testContext.alice,
           '100',
-          {
-            issuer: testContext.gw.address,
-            currency: 'USD',
-            value: '0.1',
-          }
+          USD('0.1'),
         )
         const states = await getStates(testContext.alice)
         expect(states.balanceA).toBe(0.0001)
         expect(states.balanceB).toBe(0.1)
       })
       it('setup5 - 100XAH/1000USD', async () => {
-        await deposit(testContext.alice, xrpToDrops('100'), {
-          issuer: testContext.gw.address,
-          currency: 'USD',
-          value: '1000',
-        })
+        await deposit(testContext.alice, xrpToDrops('100'), USD('1000'))
         const states = await getStates(testContext.alice)
         expect(states.balanceA).toBe(100)
         expect(states.balanceB).toBe(1000)
       })
       it('setup6 - 1000XAH/0.000001USD', async () => {
-        await deposit(testContext.alice, xrpToDrops('1000'), {
-          issuer: testContext.gw.address,
-          currency: 'USD',
-          value: '0.000001',
-        })
+        await deposit(testContext.alice, xrpToDrops('1000'), USD('0.000001'))
         const states = await getStates(testContext.alice)
         expect(states.balanceA).toBe(1000)
         expect(states.balanceB).toBe(0.000001)
@@ -567,27 +553,15 @@ describe('test', () => {
     })
     describe('deposit', async () => {
       beforeEach(async () => {
-        await fundIOU(testContext.gw, testContext.bob, {
-          issuer: testContext.gw.address,
-          currency: 'EUR',
-          value: '1000',
-        })
-        await deposit(
-          testContext.alice,
-          { issuer: testContext.gw.address, currency: 'EUR', value: '100', },
-          { issuer: testContext.gw.address, currency: 'USD', value: '100', }
-        )
+        await fundIOU(testContext.gw, testContext.bob, EUR('1000'))
+        await deposit(testContext.alice, EUR('100'), USD('100'))
       })
       afterEach(async () => {
         await withdraw(testContext.alice)
       })
       it.each([['101.1', '100'], ['100', '101.1']])('ratio error', async (a, b) => {
         {
-          const response = deposit(
-            testContext.alice,
-            { issuer: testContext.gw.address, currency: 'EUR', value: a, },
-            { issuer: testContext.gw.address, currency: 'USD', value: b, }
-          )
+          const response = deposit(testContext.alice, EUR(a), USD(b))
           await expect(response).rejects.toThrow(
             'AMM: Divergence too great. Send amounts at the correct ratio',
           )
@@ -596,8 +570,8 @@ describe('test', () => {
       it.each([['101', '100'], ['100', '101']])('additional deposit', async (a, b) => {
         await deposit(
           testContext.alice,
-          { issuer: testContext.gw.address, currency: 'EUR', value: a, },
-          { issuer: testContext.gw.address, currency: 'USD', value: b, }
+          EUR(a),
+          USD(b),
         )
       })
       it('deposit from another account', async () => {
@@ -606,42 +580,38 @@ describe('test', () => {
         })
         await deposit(
           testContext.bob,
-          { issuer: testContext.gw.address, currency: 'EUR', value: '100', },
-          { issuer: testContext.gw.address, currency: 'USD', value: '100', }
+          EUR('100'),
+          USD('100'),
         )
       })
     })
     describe('withdraw', () => {
       describe('errors', () => {
         beforeEach(async () => {
-          await fundIOU(testContext.gw, testContext.alice, {
-            issuer: testContext.gw.address,
-            currency: 'EUR',
-            value: '1000',
-          })
+          await fundIOU(testContext.gw, testContext.alice, EUR('1000'))
           await deposit(
             testContext.alice,
-            { issuer: testContext.gw.address, currency: 'EUR', value: '100', },
-            { issuer: testContext.gw.address, currency: 'USD', value: '100', }
+            EUR('100'),
+            USD('100'),
           )
         })
         afterEach(async () => {
           await withdraw(testContext.alice)
         })
         it.each([-1, -0.1, -0.01])("Invalid LPToken amount %s", async (amount) => {
-          const response = withdraw(testContext.alice, amount.toString())
+          const response = withdraw(testContext.alice, amount)
           await expect(response).rejects.toThrow(
             'AMM: Minimum withdrawal amount is 1% of holdings.',
           )
         })
         it.each([0.1, 0.9])('Very small partial withdraw %s', async (amount) => {
-          const response = withdraw(testContext.alice, amount.toString())
+          const response = withdraw(testContext.alice, amount)
           await expect(response).rejects.toThrow(
             'AMM: Minimum withdrawal amount is 1% of holdings.',
           )
         })
         it.each([99.1, 99.9])('Very large partial withdraw %s', async (amount) => {
-          const response = withdraw(testContext.alice, amount.toString())
+          const response = withdraw(testContext.alice, amount)
           await expect(response).rejects.toThrow(
             'AMM: To withdraw all omit the WDR param on the REMIT txn.',
           )
@@ -651,18 +621,18 @@ describe('test', () => {
         beforeEach(async () => {
           await deposit(
             testContext.alice,
-            { issuer: testContext.gw.address, currency: 'EUR', value: '100', },
-            { issuer: testContext.gw.address, currency: 'USD', value: '100', }
+            EUR('100'),
+            USD('100'),
           )
         })
         it.each([0, 100, 101])('withdraw All %s', async (amount) => {
-          await withdraw(testContext.alice, amount.toString())
+          await withdraw(testContext.alice, amount)
         })
         it.each([1, 50, 99])('withdraw partial A (%s) -> B', async (amount) => {
           onTestFinished(async () => {
             await withdraw(testContext.alice)
           })
-          await withdraw(testContext.alice, amount.toString())
+          await withdraw(testContext.alice, amount)
           const states = await getStates(testContext.alice)
           expect(states.balanceA).toBe(100 - amount)
           expect(states.balanceB).toBe(100 - amount)
@@ -675,17 +645,17 @@ describe('test', () => {
           await deposit(
             testContext.alice,
             xrpToDrops(100),
-            { issuer: testContext.gw.address, currency: 'USD', value: '100', }
+            USD('100'),
           )
         })
         it.each([0, 100, 101])('withdraw All %s', async (amount) => {
-          await withdraw(testContext.alice, amount.toString())
+          await withdraw(testContext.alice, amount)
         })
         it.each([1, 50, 99])('withdraw A (%s) -> B', async (amount) => {
           onTestFinished(async () => {
             await withdraw(testContext.alice)
           })
-          await withdraw(testContext.alice, amount.toString())
+          await withdraw(testContext.alice, amount)
           const states = await getStates(testContext.alice)
           expect(states.balanceA).toBe(100 - amount)
           expect(states.balanceB).toBe(100 - amount)
@@ -697,21 +667,13 @@ describe('test', () => {
     describe('swap', () => {
       describe('without fee', () => {
         beforeEach(async () => {
-          await fundIOU(testContext.gw, testContext.alice, {
-            issuer: testContext.gw.address,
-            currency: 'EUR',
-            value: '100000',
-          })
-          await fundIOU(testContext.gw, testContext.bob, {
-            issuer: testContext.gw.address,
-            currency: 'EUR',
-            value: '100000',
-          })
+          await fundIOU(testContext.gw, testContext.alice, EUR('100000'))
+          await fundIOU(testContext.gw, testContext.bob, EUR('100000'))
           await deposit(
             testContext.alice,
-            { issuer: testContext.gw.address, currency: 'EUR', value: '1000', },
-            { issuer: testContext.gw.address, currency: 'USD', value: '1000', }
-            , '0'
+            EUR('1000'),
+            USD('1000'),
+            '0'
           )
         })
         afterEach(async () => {
@@ -719,11 +681,7 @@ describe('test', () => {
         })
         it.each([1, 10, 20, 50, 100, 250, 500, 1000, 2500,/*5000,*/ 10000])('swap A (%s) -> B', async (amount) => {
           // 5000 will cause `AMM: Invariant failure A*B<G.`
-          await swap(testContext.alice, {
-            issuer: testContext.gw.address,
-            currency: 'EUR',
-            value: amount.toString(),
-          })
+          await swap(testContext.alice, EUR(amount))
           const states = await getStates(testContext.alice)
           expect(states.balanceA).toBe(1000 + amount)
           expect(states.balanceB).toBeCloseTo((1000000 / (1000 + amount)))
@@ -731,15 +689,11 @@ describe('test', () => {
       })
       describe('with fee', () => {
         beforeEach(async () => {
-          await fundIOU(testContext.gw, testContext.alice, {
-            issuer: testContext.gw.address,
-            currency: 'EUR',
-            value: '1000',
-          })
+          await fundIOU(testContext.gw, testContext.alice, EUR('1000'))
           await deposit(
             testContext.alice,
-            { issuer: testContext.gw.address, currency: 'EUR', value: '100', },
-            { issuer: testContext.gw.address, currency: 'USD', value: '100', }
+            EUR('100'),
+            USD('100'),
           )
         })
         afterEach(async () => {
@@ -747,11 +701,7 @@ describe('test', () => {
         })
         describe('IOU/IOU', () => {
           it.each([10, 100, 200, 1000])('swap A (%s) -> B', async (amount) => {
-            const response = await swap(testContext.alice, {
-              issuer: testContext.gw.address,
-              currency: 'EUR',
-              value: amount.toString(),
-            })
+            const response = await swap(testContext.alice, EUR(amount))
             const meta = response.meta as TransactionMetadata
             const { executions } =
               await ExecutionUtility.getHookExecutionsFromMeta(
@@ -781,11 +731,7 @@ describe('test', () => {
             expect(states.balanceB).toBeCloseTo(expectedB)
           })
           it.each([10, 100, 200, 1000])('swap B (%s) -> A', async (amount) => {
-            const response = await swap(testContext.alice, {
-              issuer: testContext.gw.address,
-              currency: 'USD',
-              value: amount.toString(),
-            })
+            const response = await swap(testContext.alice, USD(amount))
             const meta = response.meta as TransactionMetadata
             const { executions } =
               await ExecutionUtility.getHookExecutionsFromMeta(
@@ -812,20 +758,16 @@ describe('test', () => {
             expect(states.balanceA * states.balanceB).toBeGreaterThanOrEqual(expectedConstant)
             expect(expectedA).toBeCloseTo(states.balanceA)
           })
-          it.only('Shoud not take the profits in the pool by withdrawing immediately after depositing the pool. ', async () => {
+          it('Shoud not take the profits in the pool by withdrawing immediately after depositing the pool. ', async () => {
             await swap(testContext.alice, { issuer: testContext.gw.address, currency: 'EUR', value: '100', })
             const states = await getStates(testContext.alice)
             const deposit_amountA = states.balanceA
             const deposit_amountB = states.balanceB
-            await fundIOU(testContext.gw, testContext.bob, {
-              issuer: testContext.gw.address,
-              currency: 'EUR',
-              value: '100',
-            })
+            await fundIOU(testContext.gw, testContext.bob, EUR('100'))
             await deposit(
               testContext.bob,
-              { issuer: testContext.gw.address, currency: 'EUR', value: deposit_amountA.toString(), },
-              { issuer: testContext.gw.address, currency: 'USD', value: deposit_amountB.toString(), }
+              EUR(deposit_amountA),
+              USD(deposit_amountB),
             )
             await withdraw(testContext.bob)
             const withdraw_states = await getStates(testContext.alice)
@@ -840,20 +782,12 @@ describe('test', () => {
     })
     describe('lptoken calculation', () => {
       beforeEach(async () => {
-        await fundIOU(testContext.gw, testContext.alice, {
-          issuer: testContext.gw.address,
-          currency: 'EUR',
-          value: '2000',
-        })
-        await fundIOU(testContext.gw, testContext.bob, {
-          issuer: testContext.gw.address,
-          currency: 'EUR',
-          value: '2000',
-        })
+        await fundIOU(testContext.gw, testContext.alice, EUR('2000'))
+        await fundIOU(testContext.gw, testContext.bob, EUR('2000'))
         await deposit(
           testContext.alice,
-          { issuer: testContext.gw.address, currency: 'EUR', value: '100', },
-          { issuer: testContext.gw.address, currency: 'USD', value: '100', },
+          EUR('100'),
+          USD('100'),
           '0'
         )
       })
@@ -865,7 +799,7 @@ describe('test', () => {
         expect(s.ownerLp).toBe(100)
         expect(s.TOT).toBe(100)
         {
-          await deposit(testContext.alice, { issuer: testContext.gw.address, currency: 'EUR', value: '100', }, { issuer: testContext.gw.address, currency: 'USD', value: '100', })
+          await deposit(testContext.alice, EUR('100'), USD('100'))
           const states = await getStates(testContext.alice)
           expect(states.ownerLp).toBe(200)
           expect(states.TOT).toBe(200)
@@ -891,9 +825,9 @@ describe('test', () => {
         expect(s.ownerLp).toBe(100)
         expect(s.TOT).toBe(100)
 
-        await fundIOU(testContext.gw, testContext.bob, { issuer: testContext.gw.address, currency: 'EUR', value: '1000', })
+        await fundIOU(testContext.gw, testContext.bob, EUR('1000'))
         {
-          await deposit(testContext.bob, { issuer: testContext.gw.address, currency: 'EUR', value: '100', }, { issuer: testContext.gw.address, currency: 'USD', value: '100', })
+          await deposit(testContext.bob, EUR('100'), USD('100'))
           const states = await getStates(testContext.bob)
           expect(states.ownerLp).toBe(100)
           expect(states.TOT).toBe(200)
@@ -918,7 +852,7 @@ describe('test', () => {
         expect(s.balanceA).toBe(100)
         expect(s.balanceB).toBe(100)
 
-        await deposit(testContext.alice, { issuer: testContext.gw.address, currency: 'EUR', value: '10', }, { issuer: testContext.gw.address, currency: 'USD', value: '10', })
+        await deposit(testContext.alice, EUR('10'), USD('10'))
         const states = await getStates(testContext.alice)
         expect(states.ownerLp).toBe(110)
         expect(states.TOT).toBe(110)
@@ -933,7 +867,7 @@ describe('test', () => {
         expect(s.ownerLp).toBe(100)
         expect(s.TOT).toBe(100)
 
-        await deposit(testContext.alice, { issuer: testContext.gw.address, currency: 'EUR', value: '1000', }, { issuer: testContext.gw.address, currency: 'USD', value: '1000', })
+        await deposit(testContext.alice, EUR('1000'), USD('1000'))
         {
           const states = await getStates(testContext.alice)
           expect(states.ownerLp).toBe(1100)
@@ -958,26 +892,26 @@ describe('test', () => {
         await withdraw(testContext.alice)
       })
       it('same account', async () => {
-        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0')
+        await deposit(testContext.alice, '100', USD('100'), '0')
         const states = await getStates(testContext.alice)
         expect(states.FAC).toBe(0)
         expect(states.ownerFeeSetting).toBe(0)
         // update to zero
-        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0')
+        await deposit(testContext.alice, '100', USD('100'), '0')
         {
           const states = await getStates(testContext.alice)
           expect(states.FAC).toBe(0)
           expect(states.ownerFeeSetting).toBe(0)
         }
         // increase
-        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.03')
+        await deposit(testContext.alice, '100', USD('100'), '0.03')
         {
           const states = await getStates(testContext.alice)
           expect(states.FAC).toBe(0.03 * 300)
           expect(states.ownerFeeSetting).toBe(0.03)
         }
         // decrease
-        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.01')
+        await deposit(testContext.alice, '100', USD('100'), '0.01')
         {
           const states = await getStates(testContext.alice)
           expect(states.FAC).toBe(0.01 * 400)
@@ -992,26 +926,26 @@ describe('test', () => {
         }
       })
       it('different account', async () => {
-        await deposit(testContext.alice, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.01')
+        await deposit(testContext.alice, '100', USD('100'), '0.01')
         const states = await getStates(testContext.bob)
         expect(states.FAC).toBe(0.01 * 100)
         expect(states.ownerFeeSetting).toBeUndefined()
         // vote to zero
-        await deposit(testContext.bob, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0')
+        await deposit(testContext.bob, '100', USD('100'), '0')
         {
           const states = await getStates(testContext.bob)
           expect(states.FAC).toBe(0.01 * 100)
           expect(states.ownerFeeSetting).toBe(0)
         }
         // increase
-        await deposit(testContext.bob, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.03')
+        await deposit(testContext.bob, '100', USD('100'), '0.03')
         {
           const states = await getStates(testContext.bob)
           expect(states.FAC).toBe(0.01 * 100 + 0.03 * 200)
           expect(states.ownerFeeSetting).toBe(0.03)
         }
         // decrease
-        await deposit(testContext.bob, '100', { issuer: testContext.gw.address, currency: 'USD', value: '100', }, '0.01')
+        await deposit(testContext.bob, '100', USD('100'), '0.01')
         {
           const states = await getStates(testContext.bob)
           expect(states.FAC).toBe(0.01 * 100 + 0.01 * 300)
