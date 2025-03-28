@@ -25,7 +25,7 @@
 #define GUARD(maxiter) _g((1ULL << 31U) + __LINE__, (maxiter)+1)
 #define GUARDM(maxiter, n) _g(( (1ULL << 31U) + (__LINE__ << 16) + n), (maxiter)+1)
 
-#define SBUF(str) (uint32_t)(str), sizeof(str)
+#define SBUF(str) (uint32_t)(&str), sizeof(str)
 
 #define REQUIRE(cond, str)\
 {\
@@ -633,7 +633,7 @@ int out_len = 0;\
         _08_01_ENCODE_ACCOUNT_SRC          (buf_out, acc                            );      /* account | size  22 */ \
         _08_03_ENCODE_ACCOUNT_DST          (buf_out, to_address                     );      /* account | size  22 */ \
         etxn_details((uint32_t)buf_out, PREPARE_PAYMENT_SIMPLE_TRUSTLINE_SIZE);             /* emitdet | size 1?? */  \
-        int64_t fee = etxn_fee_base(buf_out_master, PREPARE_PAYMENT_SIMPLE_TRUSTLINE_SIZE);                          \ 
+        int64_t fee = etxn_fee_base(buf_out_master, PREPARE_PAYMENT_SIMPLE_TRUSTLINE_SIZE);                          \
         _06_08_ENCODE_DROPS_FEE            (fee_ptr, fee                            );                               \
     }
 

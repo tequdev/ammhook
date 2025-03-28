@@ -47,5 +47,7 @@
 #include "sfcodes.h"
 #include "macro.h"
 #include "tts.h"
+#include "txn-template.h"
+#include "xfl.h"
 
 #endif
